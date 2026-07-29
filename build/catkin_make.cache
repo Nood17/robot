@@ -1,0 +1,2 @@
+WK/G1Nav2D/src/fastlio2:WK/G1Nav2D/src/movebase:WK/G1Nav2D/src/pointcloud_to_laserscan:WK/G1Nav2D/src/ros_map_edit:WK/G1Nav2D/src/tool:WK/G1Nav2D/src/velocity_smoother_ema:livox_ros_driver2
+-DROS_EDITION=ROS1 -DCATKIN_DEVEL_PREFIX=/workspace/devel -DCMAKE_INSTALL_PREFIX=/workspace/install -G Unix Makefiles

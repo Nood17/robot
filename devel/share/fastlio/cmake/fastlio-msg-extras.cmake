@@ -1,0 +1,2 @@
+set(fastlio_MESSAGE_FILES "")
+set(fastlio_SERVICE_FILES "/workspace/src/WK/G1Nav2D/src/fastlio2/srv/SlamReLoc.srv;/workspace/src/WK/G1Nav2D/src/fastlio2/srv/SaveMap.srv;/workspace/src/WK/G1Nav2D/src/fastlio2/srv/MapConvert.srv;/workspace/src/WK/G1Nav2D/src/fastlio2/srv/SlamHold.srv;/workspace/src/WK/G1Nav2D/src/fastlio2/srv/SlamStart.srv;/workspace/src/WK/G1Nav2D/src/fastlio2/srv/SlamRelocCheck.srv")
