@@ -25,102 +25,121 @@
 2. 进入系统的“网络-有线连接”设置，将 IPv4 改为手动配置：  
    * **IP 地址**：192.168.123.xxx （xxx 为 0-255 之间的整数，建议避开雷达默认 IP 120）  
    * **子网掩码 (Netmask)**：255.255.255.0  
-3. 打开终端，测试与雷达的连接：  
-   \# 测试是否能连接到 MID360 的默认 IP  
-   ping 192.168.123.120
+3. 打开终端，测试与雷达的连接：
 
-   *注意：如果无法 ping 通，请检查网络设置是否已保存，或尝试更换上述的 xxx 后缀。*  
-4. 修改项目中的雷达 IP 配置文件：  
-   \# 进入雷达配置文件目录  
-   cd ros\_workspace/src/WK/G1Nav2D/src/livox\_ros\_driver2/config  
-   \# 编辑 MID360\_config.json  
-   vim MID360\_config.json
+```
+# 测试是否能连接到 MID360 的默认 IP    
+ping 192.168.123.120
+```
 
-   **修改说明**：将其中的 host\_net\_info 节点下的 4 个 IP 地址修改为您刚刚在有线连接中设置的本机 IP（即 192.168.123.xxx）。
+*注意：如果无法 ping 通，请检查网络设置是否已保存，或尝试更换上述的 xxx 后缀。*
+
+4\. 修改项目中的雷达 IP 配置文件：
+
+```
+# 进入雷达配置文件目录    
+cd ros_workspace/src/WK/G1Nav2D/src/livox_ros_driver2/config    
+# 编辑 MID360_config.json    
+vim MID360_config.json
+```
+
+**修改说明**：将其中的 host\_net\_info 节点下的 4 个 IP 地址修改为您刚刚在有线连接中设置的本机 IP（即 192.168.123.xxx）。
 
 ## **安装与编译**
 
 ### **1\. 下载工作空间**
 
-\# 克隆项目源码  
+```
+# 克隆项目源码    
 git clone https://github.com/nood/robot.git
 
-\# 进入工作空间目录  
-cd robot/ros\_workspace
+# 进入工作空间目录    
+cd robot/ros_workspace
+```
 
 ### **2\. 安装基础编译工具及依赖**
 
-\# 更新软件源并安装 cmake 及编译基础套件  
-sudo apt update   
-sudo apt install \-y cmake build-essential git
+```
+# 更新软件源并安装 cmake 及编译基础套件    
+sudo apt update     
+sudo apt install -y cmake build-essential git
 
-\# 安装 ROS Noetic 相关的传感器及导航依赖包  
-sudo apt-get install \-y ros-noetic-tf2-sensor-msgs \\  
+# 安装 ROS Noetic 相关的传感器及导航依赖包    
+sudo apt-get install -y ros-noetic-tf2-sensor-msgs \\  
                         ros-noetic-teb-local-planner \\  
                         ros-noetic-global-planner \\  
                         ros-noetic-costmap-server
+```
 
 ### **3\. 编译安装 Livox-SDK2**
 
-\# 进入存放 SDK 源码的 src 目录 (假设 SDK 已包含在 src 中)  
-cd src  
+
+```  
+cd src    
 mkdir build && cd build
 
-\# 编译并安装 SDK 到系统  
-cmake ..   
-make \-j  
+# 编译并安装 SDK 到系统    
+cmake ..     
+make -j    
 sudo make install
+```
 
 ### **4\. 编译 ROS 工作空间**
 
-\# 退回到工作空间根目录  
-cd ../.. 
+```
+# 退回到工作空间根目录    
+cd ros_workspace 
 
-\# 清理旧的编译残留，确保全新编译  
-rm \-rf build/ devel/
+# 清理旧的编译残留，确保全新编译    
+rm -rf build/ devel/
 
-\# 加载 ROS 基础环境变量  
+# 加载 ROS 基础环境变量    
 source /opt/ros/noetic/setup.bash
 
-\# 指定 ROS1 版本，单独编译雷达驱动包  
-catkin\_make \-DROS\_EDITION=ROS1 \--pkg livox\_ros\_driver2
+# 编译雷达驱动包    
+catkin_make -DROS_EDITION=ROS1 --pkg livox_ros_driver2
 
-\# 单线程编译 fastlio (防止多线程内存不足导致编译失败)  
-catkin\_make \-DROS\_EDITION=ROS1 \--pkg fastlio \-j1
+# 编译 fastlio  
+catkin_make -DROS_EDITION=ROS1 --pkg fastlio -j1
 
-\# 编译工作空间内剩余的所有功能包  
-catkin\_make \-DROS\_EDITION=ROS1
+# 编译工作空间内剩余的所有功能包    
+catkin_make -DROS_EDITION=ROS1
 
-\# 刷新当前工作空间的环境变量  
+# 刷新当前工作空间的环境变量    
 source devel/setup.bash
+```
 
 ### **5\. 编译与配置宇树运动接口 (CycloneDDS)**
 
-\# 进入 cyclonedds 源码目录  
+```
+# 进入 cyclonedds 源码目录    
 cd src/WK/cyclonedds
 
-\# 创建编译与安装目录  
+# 创建编译与安装目录    
 mkdir build install && cd build
 
-\# 配置 cmake，指定安装路径为刚刚创建的 install 文件夹  
-cmake .. \-DCMAKE\_INSTALL\_PREFIX=../install  
-\# 编译并安装  
-cmake \--build . \--target install
+# 配置 cmake，指定安装路径为刚刚创建的 install 文件夹    
+cmake .. -DCMAKE_INSTALL_PREFIX=../install    
+# 编译并安装    
+cmake --build . --target install
 
-\# 将路径导出为环境变量（注意：请将 /path/to 替换为您系统的实际绝对路径）  
-export CYCLONEDDS\_HOME="/path/to/ros\_workspace/src/WK/cyclonedds/install"
+# 将路径导出为环境变量（注意：请将 /path/to 替换为您系统的实际绝对路径）    
+export CYCLONEDDS_HOME="/path/to/ros_workspace/src/WK/cyclonedds/install"
 
-\# 安装 Python 接口包  
-\# 排错提示：如果执行失败，可能是由于 pip 版本或环境限制问题，可尝试更新 pip 或使用虚拟环境  
-pip3 install \-e . 
+# 安装 Python 接口包    
+# 排错提示：如果执行失败，可能是由于 pip 版本或环境限制问题，可尝试更新 pip 或使用虚拟环境    
+pip3 install -e . 
+```
 
-为了避免每次打开终端都需要重新配置 CycloneDDS 的环境变量，建议将其追加到 \~/.bashrc 中：
+为了避免每次打开终端都需要重新配置 CycloneDDS 的环境变量，建议将其追加到 ~/.bashrc 中：
 
-\# 永久追加环境变量到 bashrc（请务必将 /path/to 替换为实际绝对路径）  
-echo 'export CYCLONEDDS\_HOME="/path/to/ros\_workspace/src/WK/cyclonedds/install"' \>\> \~/.bashrc
+```
+# 永久追加环境变量到 bashrc（请务必将 /path/to 替换为实际绝对路径）    
+echo 'export CYCLONEDDS_HOME="/path/to/ros_workspace/src/WK/cyclonedds/install"' >> ~/.bashrc
 
-\# 使环境变量立即生效  
-source \~/.bashrc
+# 使环境变量立即生效    
+source ~/.bashrc
+```
 
 ## **使用说明**
 
@@ -128,25 +147,31 @@ source \~/.bashrc
 
 打开终端，运行 Fast-LIO 建图节点：
 
-\# 进入工作空间并加载环境变量  
-cd ros\_workspace  
+```
+# 进入工作空间并加载环境变量    
+cd ros_workspace    
 source devel/setup.bash
 
-\# 启动建图 launch 文件  
+# 启动建图 launch 文件    
 roslaunch fastlio mapping.launch
+```
 
-*运行成功后，终端会有持续的数据刷新提示，表示正在接收雷达数据并进行建图。*
+*运行成功后，会弹出窗口，终端会有持续的数据刷新提示，表示正在接收雷达数据并进行建图。*
 
 ### **2\. 保存地图**
 
 当地图扫描完整后，**新开一个终端**，执行以下命令保存地图：
 
-cd ros\_workspace  
+```
+cd ros_workspace    
 source devel/setup.bash
 
-\# 订阅 projected\_map 话题并保存为地图文件  
-\# 请将 \[your\_username\] 替换为您的实际系统用户名  
-rosrun map\_server map\_saver map:=/projected\_map \-f /home/\[your\_username\]/map/mymap
+
+
+# 订阅 projected_map 话题并保存为地图文件    
+# 请将 [your_username] 替换为您的实际系统用户名    
+rosrun map_server map_saver map:=/projected_map -f /home/[your_username]/map/mymap
+```
 
 ### **3\. 编辑与修饰地图**
 
@@ -162,7 +187,9 @@ Fast-LIO 投影出来的 2D 地图可能会有一些噪点，可以通过图像�
 
 ## **待办事项 (TODO)**
 
-* \[ \] 接入并调试语音交互模块。  
-* \[ \] 完善基于 Unitree SDK 的运动控制逻辑。  
-* \[ \] 开发跨平台的平板端控制软件，优化用户交互体验。  
-* \[ \] 后续导航参数调优与更新。
+* **![][image1]**接入并调试语音交互模块。  
+* ![][image1]完善基于 Unitree SDK 的运动控制逻辑。  
+* ![][image1]开发跨平台的平板端控制软件，优化用户交互体验。  
+* ![][image1]后续导航参数调优与更新。
+
+[image1]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAmwAAAAaCAYAAAAKcQDQAAAAVUlEQVR4Xu3BAQ0AAADCoPdP7ewBFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA3AD7+gAB2LuVMgAAAABJRU5ErkJggg==>
