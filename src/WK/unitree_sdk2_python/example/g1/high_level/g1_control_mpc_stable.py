@@ -27,11 +27,25 @@ class AdaptiveMPCController:
         self.sport_client.SetTimeout(10.0)
         try:
             self.sport_client.Init()
+
+            rospy.sleep(0.5) # 给底层一点建立连接的时间
+            
+            # 1. 尝试主动切入常规/主运控，确保 SDK 接管
+            self.sport_client.Start() 
+            
+            # 2. 开启 Move 指令的持续响应模式[cite: 2]
+            # 默认情况下 Move 指令只生效 1 秒，若无新指令会自动停止[cite: 2]
+            # 开启后，底层会一直响应最新的 Move 指令[cite: 2]
+            try:
+                self.sport_client.SwitchMoveMode(True) 
+            except AttributeError:
+                pass # 如果 SDK 版本太老没有这个函数，就跳过
+
         except Exception as e:
             print(f"[ERROR] 机器人连接失败: {e}")
             sys.exit(-1)
 
-        self.can_move = False
+        self.can_move = True
         self.control_freq = 50.0
         self.dt = 1.0 / self.control_freq
         
@@ -128,16 +142,8 @@ class AdaptiveMPCController:
                 self.is_stopped = False
                 rospy.loginfo("🔓 解锁：开始新运动")
 
-        # 【核心修改】全局禁止倒车
-        # 无论 Fast 还是 Slow，只要是参观导览，倒车通常是非预期行为
-        if msg.linear.x < 0.0:
-            self.target_vx = 0.0
-            # 仅在初次检测到倒车时报警，避免刷屏
-            if self.last_cmd_vx >= 0: 
-                 rospy.logwarn("⛔ 拦截倒车指令，改为原地调整")
-        else:
-            self.target_vx = msg.linear.x
-            
+        
+        self.target_vx = msg.linear.x
         self.target_vy = msg.linear.y
         
         mode = self.get_adaptive_mode()
@@ -219,15 +225,18 @@ class AdaptiveMPCController:
                 R_ang = self.R_v_ang_slow
                 acc_w = self.max_acc_w_slow
             
-            cmd_vx = self.solve_mpc_step(self.current_vx, self.target_vx, self.last_cmd_vx, 
-                                         self.max_vx, self.max_acc_v, self.R_v_lin)
-            cmd_vy = self.solve_mpc_step(self.current_vy, self.target_vy, self.last_cmd_vy, 
-                                         self.max_vy, self.max_acc_v, self.R_v_lin)
-            
-            cmd_wz = self.solve_mpc_step(self.current_wz, self.target_wz, self.last_cmd_wz, 
-                                         self.max_wz, acc_w, R_ang)
+            tol_lin = 0.2  # 线速度最大允许偏差 (m/s)
+            tol_ang = 0.3  # 角速度最大允许偏差 (rad/s)
 
-            if int(rospy.get_time() * 5) % 1 == 0: 
+            base_vx = np.clip(self.last_cmd_vx, self.current_vx - tol_lin, self.current_vx + tol_lin)
+            base_vy = np.clip(self.last_cmd_vy, self.current_vy - tol_lin, self.current_vy + tol_lin)
+            base_wz = np.clip(self.last_cmd_wz, self.current_wz - tol_ang, self.current_wz + tol_ang)
+            
+            cmd_vx = self.solve_mpc_step(base_vx, self.target_vx, self.last_cmd_vx, self.max_vx, self.max_acc_v, self.R_v_lin)
+            cmd_vy = self.solve_mpc_step(base_vy, self.target_vy, self.last_cmd_vy, self.max_vy, self.max_acc_v, self.R_v_lin)
+            cmd_wz = self.solve_mpc_step(base_wz, self.target_wz, self.last_cmd_wz, self.max_wz, acc_w, R_ang)
+
+            if int(rospy.get_time() * 5) % 10 == 0: 
                 mode_tag = "F" if mode == "fast" else "S"
                 print(f"[{mode_tag}] Target: ({self.target_vx:.2f}, {self.target_wz:.2f}) | "
                       f"Current: ({self.current_vx:.2f}, {self.current_wz:.2f}) -> "
@@ -241,6 +250,7 @@ class AdaptiveMPCController:
             self.last_cmd_vx = cmd_vx
             self.last_cmd_vy = cmd_vy
             self.last_cmd_wz = cmd_wz
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
