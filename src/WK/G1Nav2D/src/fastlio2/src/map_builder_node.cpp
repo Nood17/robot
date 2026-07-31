@@ -1333,11 +1333,19 @@ int main(int argc, char **argv)
     ground_pub_thread.setRate(1.0);    // 1Hz，可根据需要调整
     std::thread ground_pub_worker(std::ref(ground_pub_thread));
 
-    // 设置全局指针和保存路径
+    time_t now = time(0);
+    struct tm tstruct = *localtime(&now);
+    char time_buf[80];
+    strftime(time_buf, sizeof(time_buf), "%Y%m%d_%H%M%S", &tstruct);
+    std::string time_str(time_buf);
+
+    // 2. 设置全局指针并将时间戳拼接到文件名中
     g_ground_pub_thread = &ground_pub_thread;
-    g_map_path = "/home/water/WK/G1Nav2D/src/fastlio2/PCD/map.pcd";
-    g_ground_map_path = "/home/water/WK/G1Nav2D/src/fastlio2/PCD/ground_map.pcd";
-    g_keyposes_path = "/home/water/WK/G1Nav2D/src/fastlio2/path/key_poses.txt";
+    g_map_path = "/workspace/map3D/map_" + time_str + ".pcd";
+    g_ground_map_path = "/workspace/map3D/ground_map_" + time_str + ".pcd";
+    g_keyposes_path = "/workspace/map3D/key_poses_" + time_str + ".txt";
+
+    // 3. 运行原有逻辑
     map_builder.run();
     ground_pub_worker.join();
     return 0;
