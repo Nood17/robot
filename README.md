@@ -170,11 +170,10 @@ mkdir map3D #3D 地图
 修改第二处结果文件保存路径
 
 ```
-
-   #以下三处都要该改
-   g_map_path = "/workspace/map3D/map_" + time_str + ".pcd";
-   g_ground_map_path = "/workspace/map3D/ground_map_" + time_str + ".pcd";
-   g_keyposes_path = "/workspace/map3D/key_poses_" + time_str + ".txt";
+#以下三处都要该改
+g_map_path = "/workspace/map3D/map_" + time_str + ".pcd";
+g_ground_map_path = "/workspace/map3D/ground_map_" + time_str + ".pcd";
+g_keyposes_path = "/workspace/map3D/key_poses_" + time_str + ".txt";
 ```
 
 改完保存后，在终端里运行
