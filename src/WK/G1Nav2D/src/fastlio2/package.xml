@@ -2,18 +2,10 @@
 <package format="2">
   <name>fastlio</name>
   <version>0.0.0</version>
-  <description>The fastlio package</description>
+  <description>FAST-LIO2 based 3D SLAM, loop closure, and relocalization for G1 robot.</description>
 
-  <!-- One maintainer tag required, multiple allowed, one person per tag -->
-  <!-- Example:  -->
-  <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
   <maintainer email="zhouzhou@todo.todo">zhouzhou</maintainer>
-
-
-  <!-- One license tag required, multiple allowed, one license per tag -->
-  <!-- Commonly used license strings: -->
-  <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->
-  <license>TODO</license>
+  <license>BSD-2-Clause</license>
 
 
   <!-- Url tags are optional, but multiple are allowed, one per tag -->

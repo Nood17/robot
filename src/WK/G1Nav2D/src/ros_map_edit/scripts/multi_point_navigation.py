@@ -23,7 +23,7 @@ class MultiPointNavigator:
         self.poses_json_file = rospy.get_param('~poses_json_file', 'src/bobac/maps/saved_poses.json')
         self.nav_yaml_file = rospy.get_param('~mnav_yaml_file', 'src/bobac/maps/navigation_sequence.yaml')
         self.timeout = rospy.get_param('~navigation_timeout', 300.0)  # 每个点的导航超时时间
-        map_file_path = rospy.get_param('~map_file', '$(find bobac)/maps/virtual_walls.json')
+        map_file_path = rospy.get_param('~map_file', '')  # 指定 virtual_walls.json 路径，留空则不加载
         self.poses_json_file = map_file_path.replace(".yaml", "_point.json")
 
         # 状态变量

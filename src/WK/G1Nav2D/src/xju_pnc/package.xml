@@ -4,9 +4,8 @@
     <description>
         <p>planning and control package for xju robot</p>
     </description>
-    <author>TODO</author>
     <maintainer email="tongronglei@163.com" />
-    <license>TODO</license>
+    <license>BSD</license>
     <buildtool_depend>catkin</buildtool_depend>
     <buildtool_depend>message_generation</buildtool_depend>
     <depend>actionlib</depend>

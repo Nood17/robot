@@ -237,34 +237,6 @@ public:
         body_cloud_org_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("velodyne_points", 1);
     }
 
-    // bool relocCallback(fastlio::SlamReLoc::Request &req, fastlio::SlamReLoc::Response &res)
-    // {
-    //     std::string map_path = req.pcd_path;
-    //     float x = req.x;
-    //     float y = req.y;
-    //     float z = req.z;
-    //     float roll = req.roll;
-    //     float pitch = req.pitch;
-    //     float yaw = req.yaw;
-    //     Eigen::AngleAxisf rollAngle(roll, Eigen::Vector3f::UnitX());
-    //     Eigen::AngleAxisf pitchAngle(pitch, Eigen::Vector3f::UnitY());
-    //     Eigen::AngleAxisf yawAngle(yaw, Eigen::Vector3f::UnitZ());
-    //     Eigen::Quaternionf q = rollAngle * pitchAngle * yawAngle;
-    //     {
-    //         std::lock_guard<std::mutex> lock(shared_date_->service_mutex);
-    //         shared_date_->halt_flag = false;
-    //         shared_date_->service_called = true;
-    //         shared_date_->localizer_activate = true;
-    //         shared_date_->map_path = map_path;
-    //         shared_date_->initial_guess.block<3, 3>(0, 0) = q.toRotationMatrix().cast<double>();
-    //         shared_date_->initial_guess.block<3, 1>(0, 3) = Eigen::Vector3d(x, y, z);
-    //     }
-    //     res.status = 1;
-    //     res.message = "RELOCALIZE CALLED!";
-
-    //     return true;
-    // }
-
     bool relocCallback(fastlio::SlamReLoc::Request &req, fastlio::SlamReLoc::Response &res)
     {
         std::string map_path = req.pcd_path;
