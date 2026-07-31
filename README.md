@@ -51,11 +51,10 @@ vim MID360_config.json
 
 ```
 # 克隆项目源码    
-git clone https://github.com/nood/robot.git
+git clone https://github.com/nood17/robot.git
 
 # 进入工作空间目录    
-cd robot/ros_workspace
-```
+cd robot
 
 ### **2\. 安装基础编译工具及依赖**
 
@@ -123,10 +122,8 @@ cmake .. -DCMAKE_INSTALL_PREFIX=../install
 # 编译并安装    
 cmake --build . --target install
 
-# 将路径导出为环境变量（注意：请将 /path/to 替换为您系统的实际绝对路径）    
-export CYCLONEDDS_HOME="/path/to/ros_workspace/src/WK/cyclonedds/install"
-
-# 安装 Python 接口包    
+# 将路径导出为环境变量（请将下方路径替换为本机 robot 仓库的实际绝对路径）    
+export CYCLONEDDS_HOME="<你的路径>/robot/src/WK/cyclonedds/install"
 # 排错提示：如果执行失败，可能是由于 pip 版本或环境限制问题，可尝试更新 pip 或使用虚拟环境    
 pip3 install -e . 
 ```
@@ -134,8 +131,8 @@ pip3 install -e .
 为了避免每次打开终端都需要重新配置 CycloneDDS 的环境变量，建议将其追加到 ~/.bashrc 中：
 
 ```
-# 永久追加环境变量到 bashrc（请务必将 /path/to 替换为实际绝对路径）    
-echo 'export CYCLONEDDS_HOME="/path/to/ros_workspace/src/WK/cyclonedds/install"' >> ~/.bashrc
+# 永久追加环境变量到 bashrc（请将下方路径替换为实际绝对路径）    
+echo 'export CYCLONEDDS_HOME="<你的路径>/robot/src/WK/cyclonedds/install"' >> ~/.bashrc
 
 # 使环境变量立即生效    
 source ~/.bashrc
@@ -226,6 +223,32 @@ Fast-LIO 投影出来的 2D 地图可能会有一些噪点，可以通过图像�
 2. **编辑 PGM 图像文件**：  
    * 下载并安装 [PhotoGIMP](https://github.com/Diolinux/PhotoGIMP)（或使用原版 GIMP）。  
    * 用软件打开 mymap.pgm，擦除不需要的噪点或补齐墙体轮廓，保存即可供导航模块使用。
+
+## **项目架构**
+
+本项目采用三层架构，代码规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+### SLAM / 导航核心（`src/WK/G1Nav2D/src/`）
+- `fastlio2/`：FAST-LIO2 衍生的 3D SLAM + GTSAM 回环 + 两级 ICP 重定位
+- `xju_pnc/`：move_base 导航栈（TEB 局部规划器、costmap）
+- `pointcloud_to_laserscan/`、`velocity_smoother_ema/`、`ros_map_edit/`、`tool/`：辅助工具包
+
+### 运动控制（`src/WK/unitree_sdk2_python/example/g1/high_level/`）
+- `g1_controller_base.py`：7 个控制器的共享基类（SDK 初始化、订阅、到位锁定、控制循环模板）
+- `g1_control_*.py`：MPC / PID / 开环等变体，继承基类，只覆盖策略钩子
+- `g1_action_base.py`：动作控制器的共享基类（关节控制、权重、动作序列）
+- `g1_action*.py`：3 个动作变体（基础 / 含关节限位 / 时限自动计算）
+- `multi_nav.py`：多点导览讲解（带语音、动作、动态避障）
+
+### 上层应用（`src/WK/PythonProject/`）
+- `point_nav/point_nav.py`：单点导航+音频播放共享类，`point1-5.py` 为各导航点入口
+- `py-xiaozhi-main/`：语音助手集成
+- `daohang/`、`face/`：特定场景导航与人脸识别
+
+### 配置参数化
+- 地图保存路径：`map_save_dir` ROS 参数（默认 `/workspace/map3D`）
+- 导航 PCD 路径：`navigation.launch` 的 `map_pcd` / `ground_pcd` arg
+- 机器人 IP：`YgClient.py` 的 `~base_url` / `~robot_ip` rosparam
 
 ## **待办事项**
 
