@@ -1,8 +1,0 @@
-prefix=/workspace/install
-
-Name: tool
-Description: Description of tool
-Version: 0.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 

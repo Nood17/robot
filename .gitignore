@@ -1,3 +1,26 @@
 map/
 map3D/
 
+# ROS catkin build artifacts
+build/
+devel/
+# 嵌套工作区标记（根目录 .catkin_workspace 保留作为工作区根标记）
+**/.catkin_workspace
+# Python
+*.pyc
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# 运行时隐私数据（支付码、联系人、人脸照片）
+src/WK/shouna/
+.DS_Store
