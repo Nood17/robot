@@ -38,7 +38,7 @@ ping 192.168.123.120
 
 ```
 # 进入雷达配置文件目录    
-cd ros_workspace/src/WK/G1Nav2D/src/livox_ros_driver2/config    
+cd /ros_workspace/src/WK/G1Nav2D/src/livox_ros_driver2/config    
 # 编辑 MID360_config.json    
 vim MID360_config.json
 ```
@@ -88,7 +88,7 @@ sudo make install
 
 ```
 # 退回到工作空间根目录    
-cd ros_workspace 
+cd /ros_workspace 
 
 # 清理旧的编译残留，确保全新编译    
 rm -rf build/ devel/
@@ -145,11 +145,40 @@ source ~/.bashrc
 
 ### **1\. 3D SLAM 建图**
 
+首先创建保存地图的文件夹
+
+```
+cd /ros_workspace
+mkdir map #2D 地图
+mkdir map3D #3D 地图
+```
+
+保存3D点云地图前置
+
+找到文件夹 ```~/ros_workspace/src/WK/G1Nav2D/src/fastlio2/src ```
+打开文件 ``` map_builder_node.cpp```
+搜索 ```g_map_path = ```
+修改第二处结果文件保存路径
+‵‵`
+   #以下三处都要该改
+   g_map_path = "/workspace/map3D/map_" + time_str + ".pcd";
+   g_ground_map_path = "/workspace/map3D/ground_map_" + time_str + ".pcd";
+   g_keyposes_path = "/workspace/map3D/key_poses_" + time_str + ".txt";
+```
+
+改完保存后，在终端里运行
+
+```
+cd /ros_workspace
+catkin_make -DROS_EDITION=ROS1 --pkg fastlio -j1
+source devel/setup.bash
+```
+
 打开终端，运行 Fast-LIO 建图节点：
 
 ```
 # 进入工作空间并加载环境变量    
-cd ros_workspace    
+cd /ros_workspace    
 source devel/setup.bash
 
 # 启动建图 launch 文件    
@@ -162,16 +191,19 @@ roslaunch fastlio mapping.launch
 
 当地图扫描完整后，**新开一个终端**，执行以下命令保存地图：
 
+保存2D地图
+
 ```
-cd ros_workspace    
+cd /ros_workspace    
 source devel/setup.bash
 
-
-
-# 订阅 projected_map 话题并保存为地图文件    
 # 请将 [your_username] 替换为您的实际系统用户名    
-rosrun map_server map_saver map:=/projected_map -f /home/[your_username]/map/mymap
+rosrun map_server map_saver map:=/projected_map -f /home/[your_username]/ros_workspace/map/mymap
 ```
+
+保存3D地图
+
+在运行 SLAM 建图的终端下按``` ctrl + C ``` 退出程序。
 
 ### **3\. 编辑与修饰地图**
 
@@ -185,11 +217,11 @@ Fast-LIO 投影出来的 2D 地图可能会有一些噪点，可以通过图像�
    * 下载并安装 [PhotoGIMP](https://github.com/Diolinux/PhotoGIMP)（或使用原版 GIMP）。  
    * 用软件打开 mymap.pgm，擦除不需要的噪点或补齐墙体轮廓，保存即可供导航模块使用。
 
-## **待办事项 (TODO)**
+## **待办事项**
 
-* **![][image1]**接入并调试语音交互模块。  
-* ![][image1]完善基于 Unitree SDK 的运动控制逻辑。  
-* ![][image1]开发跨平台的平板端控制软件，优化用户交互体验。  
-* ![][image1]后续导航参数调优与更新。
-
-[image1]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAmwAAAAaCAYAAAAKcQDQAAAAVUlEQVR4Xu3BAQ0AAADCoPdP7ewBFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA3AD7+gAB2LuVMgAAAABJRU5ErkJggg==>
+* 自动定位
+* 2D地图降噪
+* 导航测试
+* 完善运控  
+* 开发跨平台的平板端控制软件
+* 后续导航参数调优与更新
