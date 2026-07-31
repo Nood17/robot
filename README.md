@@ -155,11 +155,22 @@ mkdir map3D #3D 地图
 
 保存3D点云地图前置
 
-找到文件夹 ```~/ros_workspace/src/WK/G1Nav2D/src/fastlio2/src ```
-打开文件 ``` map_builder_node.cpp```
-搜索 ```g_map_path = ```
+找到文件夹 
+
+```~/ros_workspace/src/WK/G1Nav2D/src/fastlio2/src ```
+
+打开文件 
+
+``` map_builder_node.cpp```
+
+搜索 
+
+```g_map_path = ```
+
 修改第二处结果文件保存路径
-‵‵`
+
+```
+
    #以下三处都要该改
    g_map_path = "/workspace/map3D/map_" + time_str + ".pcd";
    g_ground_map_path = "/workspace/map3D/ground_map_" + time_str + ".pcd";
