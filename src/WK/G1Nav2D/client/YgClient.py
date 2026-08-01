@@ -6,7 +6,9 @@ import threading
 
 class CmdVelController:
     def __init__(self):
-        self.dog = DogControllerSDK("http://192.168.58.21:5000", robot_ip="192.168.58.126")
+        base_url = rospy.get_param("~base_url", "http://192.168.58.21:5000")
+        robot_ip = rospy.get_param("~robot_ip", "192.168.58.126")
+        self.dog = DogControllerSDK(base_url, robot_ip=robot_ip)
         self.dog.__enter__()
         rospy.on_shutdown(self.cleanup)
 

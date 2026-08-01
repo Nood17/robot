@@ -62,30 +62,6 @@ Eigen::Matrix4f getLidar2BaseFromParam(const ros::NodeHandle& nh) {
     return mat;
 }
 
-class ZaxisPriorFactor : public gtsam::NoiseModelFactor1<gtsam::Pose3>
-{
-    double z_;
-
-public:
-    ZaxisPriorFactor(gtsam::Key key, const gtsam::SharedNoiseModel &noise, double z)
-        : gtsam::NoiseModelFactor1<gtsam::Pose3>(noise, key), z_(z)
-    {
-    }
-    virtual ~ZaxisPriorFactor()
-    {
-    }
-    virtual gtsam::Vector evaluateError(const gtsam::Pose3 &p, boost::optional<gtsam::Matrix &> H = boost::none) const
-    {
-        auto z = p.translation()(2);
-        if (H)
-        {
-            gtsam::Matrix Jac = gtsam::Matrix::Zero(1, 6);
-            Jac << 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
-            (*H) = Jac;
-        }
-        return gtsam::Vector1(z - z_);
-    }
-};
 
 
 
@@ -490,11 +466,6 @@ private:
             // 计算 p1 到 p2 的相对变换（以 p1 为坐标系）
             Eigen::Matrix3d R12 = p1.local_rot.transpose() * p2.local_rot;
             Eigen::Vector3d t12 = p1.local_rot.transpose() * (p2.local_pos - p1.local_pos);
-
-            // // 📌 可选 Z 轴 prior，常用于飞行器或漂移限制
-            // auto noise_prior = gtsam::noiseModel::Diagonal::Variances(gtsam::Vector1::Ones());
-            // gtsam_graph_.add(ZaxisPriorFactor(i + 1, noise_prior, p2.local_pos(2)));
-
 
             // 构造 Between 因子（两个帧之间的相对变换因子）
             gtsam::noiseModel::Diagonal::shared_ptr noise = gtsam::noiseModel::Diagonal::Variances((gtsam::Vector(6) << 1e-6, 1e-6, 1e-6, 1e-4, 1e-4, 1e-6).finished());
@@ -1339,11 +1310,11 @@ int main(int argc, char **argv)
     strftime(time_buf, sizeof(time_buf), "%Y%m%d_%H%M%S", &tstruct);
     std::string time_str(time_buf);
 
-    // 2. 设置全局指针并将时间戳拼接到文件名中
-    g_ground_pub_thread = &ground_pub_thread;
-    g_map_path = "/workspace/map3D/map_" + time_str + ".pcd";
-    g_ground_map_path = "/workspace/map3D/ground_map_" + time_str + ".pcd";
-    g_keyposes_path = "/workspace/map3D/key_poses_" + time_str + ".txt";
+    // 2. 从参数服务器读取地图保存目录（默认 /workspace/map3D），不存在时自动创建
+    std::string map_dir = nh.param<std::string>("map_save_dir", "/workspace/map3D");
+    g_map_path = map_dir + "/map_" + time_str + ".pcd";
+    g_ground_map_path = map_dir + "/ground_map_" + time_str + ".pcd";
+    g_keyposes_path = map_dir + "/key_poses_" + time_str + ".txt";
 
     // 3. 运行原有逻辑
     map_builder.run();

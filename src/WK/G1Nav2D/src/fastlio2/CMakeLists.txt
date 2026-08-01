@@ -2,15 +2,13 @@ cmake_minimum_required(VERSION 3.0.2)
 project(fastlio)
 
 
-ADD_COMPILE_OPTIONS(-std=c++14 )
-ADD_COMPILE_OPTIONS(-std=c++14 )
-set( CMAKE_CXX_FLAGS "-std=c++14 -O3" )
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fexceptions" )
+ADD_COMPILE_OPTIONS(-std=c++14)
+set(CMAKE_CXX_FLAGS "-std=c++14 -O3")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fexceptions")
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -std=c++0x -std=c++14 -fexceptions")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -fexceptions")
 
 message("Current CPU archtecture: ${CMAKE_SYSTEM_PROCESSOR}")
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)" )
@@ -111,23 +109,7 @@ target_link_libraries(localizer_node
   ${catkin_LIBRARIES} ${PCL_LIBRARIES}
 )
 
-add_executable(temp_node src/temp_node.cpp ${SRC_LIST})
 
-target_link_libraries(temp_node
-  ${catkin_LIBRARIES} ${PCL_LIBRARIES}
-)
-
-# add_executable(path2waypoint src/path2waypoint.cpp ${SRC_LIST})
-
-# target_link_libraries(path2waypoint
-#   ${catkin_LIBRARIES} ${PCL_LIBRARIES}
-# )
-
-# add_executable(base_clude_pub src/base_clude_pub.cpp ${SRC_LIST})
-
-# target_link_libraries(base_clude_pub
-#   ${catkin_LIBRARIES} ${PCL_LIBRARIES}
-# )
 
 catkin_install_python(PROGRAMS
 scripts/slam_reloc.py

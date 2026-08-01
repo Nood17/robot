@@ -1,128 +1,72 @@
 #!/usr/bin/env python3
+"""G1 自适应 MPC 控制器（v9 Final Optimized）。
+
+继承 G1BaseController，覆盖：
+  - configure_params: 分轴加速度、模式权重、tolerance 基准裁剪
+  - setup_feedback 后追加 SDK 接管（Start + SwitchMoveMode）
+  - process_cmd_vel: 快速模式角速度限幅 [0.2, 0.6]
+  - solve_step: 容差基准裁剪 + R_weight 参数
+  - control_loop: 自适应模式切换 + 调试打印
+注意：本变体 can_move 初值为 True（唯一）。
+"""
 import rospy
-from geometry_msgs.msg import Twist
-from nav_msgs.msg import Path
-import sys
 import numpy as np
 import osqp
 import scipy.sparse as sp
+from geometry_msgs.msg import Twist
 
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
-from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+from unitree_sdk2py.core.channel import ChannelSubscriber
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
 
-class AdaptiveMPCController:
-    def __init__(self, network_interface):
-        rospy.loginfo("========================================")
-        rospy.loginfo("Initializing MPC Controller (v9 - Final Optimized)...")
-        rospy.loginfo("========================================")
+from g1_controller_base import G1BaseController
 
-        try:
-            ChannelFactoryInitialize(0, network_interface)
-        except Exception as e:
-            print(f"[ERROR] 网络初始化失败: {e}")
-            sys.exit(-1)
 
-        self.sport_client = LocoClient()
-        self.sport_client.SetTimeout(10.0)
-        try:
-            self.sport_client.Init()
+class AdaptiveMPCController(G1BaseController):
+    node_name = "unitree_mpc_controller"
+    can_move_initial = True
 
-            rospy.sleep(0.5) # 给底层一点建立连接的时间
-            
-            # 1. 尝试主动切入常规/主运控，确保 SDK 接管
-            self.sport_client.Start() 
-            
-            # 2. 开启 Move 指令的持续响应模式[cite: 2]
-            # 默认情况下 Move 指令只生效 1 秒，若无新指令会自动停止[cite: 2]
-            # 开启后，底层会一直响应最新的 Move 指令[cite: 2]
-            try:
-                self.sport_client.SwitchMoveMode(True) 
-            except AttributeError:
-                pass # 如果 SDK 版本太老没有这个函数，就跳过
-
-        except Exception as e:
-            print(f"[ERROR] 机器人连接失败: {e}")
-            sys.exit(-1)
-
-        self.can_move = True
-        self.control_freq = 50.0
-        self.dt = 1.0 / self.control_freq
-        
-        # --- MPC 物理约束 ---
+    def configure_params(self):
         self.max_vx = 1.5
         self.max_vy = 0.6
         self.max_wz = 1.5
-        
         # Fast 模式参数 (调整: 提升转向响应)
         self.max_acc_w_fast = 3.5   # 3.0 -> 3.5
         self.R_v_ang_fast = 2.5     # 3.0 -> 2.5 (稍微降低平滑度，提升响应)
-
         # Slow 模式参数
         self.max_acc_w_slow = 4.0
         self.R_v_ang_slow = 2.0
-        
-        self.max_acc_v = 5.0   
-
-        # --- MPC 权重参数 ---
+        self.max_acc_v = 5.0
         self.Q_v = 10.0
-        self.R_v_lin = 2.0     
-        
-        # --- 自适应模式参数 ---
+        self.R_v_lin = 2.0
         self.adaptive_mode = "auto"
         self.deadzone_threshold = 0.05
-        
-        # --- 状态变量 ---
-        self.target_vx = 0.0
-        self.target_vy = 0.0
-        self.target_wz = 0.0
-        
-        self.current_vx = 0.0
-        self.current_vy = 0.0
-        self.current_wz = 0.0
-        
-        self.last_cmd_vx = 0.0
-        self.last_cmd_vy = 0.0
-        self.last_cmd_wz = 0.0
-        
-        # 滞回逻辑状态
         self.last_mode = "slow"
         self.mode_switch_count = 0
-
-        # --- 到位锁定机制 ---
-        self.is_stopped = False
         self.stop_velocity_threshold = 0.03
-        
-        # 订阅
-        self.cmd_vel_sub = rospy.Subscriber("/cmd_vel", Twist, self.cmd_vel_callback)
-        self.path_sub = rospy.Subscriber("/move_base/GlobalPlanner/plan", Path, self.path_callback)
-        
-        # DDS 订阅
+
+    def setup_feedback(self):
+        # SDK 接管：给底层建立连接时间，切入主运控，开启 Move 持续响应
+        rospy.sleep(0.5)
+        self.sport_client.Start()
+        try:
+            self.sport_client.SwitchMoveMode(True)
+        except AttributeError:
+            pass  # SDK 版本太老无此函数则跳过
+        # DDS 里程计
         self.odom_dds_sub = ChannelSubscriber("rt/odommodestate", SportModeState_)
         self.odom_dds_sub.Init(self.dds_odom_callback)
-
-        self.control_timer = rospy.Timer(rospy.Duration(self.dt), self.control_loop)
-        
-        rospy.loginfo("🚀 MPC 控制器已启动 (全局防倒车 + 优化滞回)")
 
     def dds_odom_callback(self, msg: SportModeState_):
         self.current_vx = msg.velocity[0]
         self.current_vy = msg.velocity[1]
         self.current_wz = msg.yaw_speed
 
-    def path_callback(self, msg: Path):
-        self.can_move = len(msg.poses) > 0
-
     def get_adaptive_mode(self):
         if self.adaptive_mode != "auto":
             return self.adaptive_mode
-        
         # 【修改】调整阈值，让 Fast 模式更"粘"
-        # 只要是正常前进 (>0.4)，就进 Fast
-        # 只有速度很低 (<0.15) 才退回 Slow
         enter_fast_threshold = 0.4
         exit_fast_threshold = 0.15  # 大幅降低，防止减速时过早切 Slow
-        
         if self.last_mode == "fast":
             if self.target_vx < exit_fast_threshold:
                 return "slow"
@@ -134,56 +78,42 @@ class AdaptiveMPCController:
             else:
                 return "slow"
 
-    def cmd_vel_callback(self, msg: Twist):
-        if self.is_stopped:
-            if abs(msg.linear.x) < 0.05 and abs(msg.linear.y) < 0.05 and abs(msg.angular.z) < 0.1:
-                return
-            else:
-                self.is_stopped = False
-                rospy.loginfo("🔓 解锁：开始新运动")
-
-        
+    def process_cmd_vel(self, msg):
         self.target_vx = msg.linear.x
         self.target_vy = msg.linear.y
-        
         mode = self.get_adaptive_mode()
         raw_wz = msg.angular.z
-        
         if mode == "fast":
             if abs(raw_wz) < self.deadzone_threshold:
                 self.target_wz = 0.0
             else:
                 if self.current_vx > 0.2:
-                    # 【修改】放宽角速度公式：0.8 -> 1.0
-                    # 允许在高速时转得更快一点
+                    # 【修改】放宽角速度公式：0.8 -> 1.0，下限 0.6
                     max_allowed_wz = 1.0 / (self.current_vx + 1.0)
-                    max_allowed_wz = max(0.2, min(0.6, max_allowed_wz)) # 下限稍微提高
-                    
+                    max_allowed_wz = max(0.2, min(0.6, max_allowed_wz))
                     self.target_wz = np.clip(raw_wz, -max_allowed_wz, max_allowed_wz)
                 else:
                     self.target_wz = raw_wz
         else:
-            # Slow 模式：信任转向
             self.target_wz = raw_wz
 
-    def solve_mpc_step(self, v_current, v_target, v_last_cmd, max_v, max_acc, R_weight):
+    def solve_step(self, v_current, v_target, v_last_cmd, max_v, max_acc, **kw):
+        R_weight = kw.get("R_v", self.R_v_lin)
         v_current = np.clip(v_current, -max_v, max_v)
-        
         P = sp.csc_matrix([[2 * (self.Q_v + R_weight)]])
         q = np.array([-2 * (self.Q_v * v_target + R_weight * v_last_cmd)])
-        
         acc_limit = max_acc * self.dt
         lower_bound = np.array([max(-max_v, v_current - acc_limit)])
         upper_bound = np.array([min(max_v, v_current + acc_limit)])
-        
         A_box = sp.csc_matrix([[1.0]])
-        
         prob = osqp.OSQP()
-        prob.setup(P, q, A_box, lower_bound, upper_bound, verbose=False, eps_abs=1e-3, eps_rel=1e-3)
+        # Warm start from last command to reduce per-step setup overhead (fixes stutter).
+        prob.setup(P, q, A_box, lower_bound, upper_bound, verbose=False,
+                   eps_abs=1e-3, eps_rel=1e-3, warm_start=True, polishing=False)
+        prob.warm_start(y=np.array([v_last_cmd]))
         res = prob.solve()
-        
         if res.info.status != 'solved':
-            return 0.0
+            return self.on_solve_failure(v_last_cmd)
         return res.x[0]
 
     def control_loop(self, event):
@@ -192,76 +122,53 @@ class AdaptiveMPCController:
             self.target_vy = 0.0
             self.target_wz = 0.0
 
-        # 到位检测
-        if (abs(self.target_vx) < 0.01 and 
-            abs(self.target_vy) < 0.01 and 
-            abs(self.target_wz) < 0.01 and
-            abs(self.current_vx) < self.stop_velocity_threshold and
-            abs(self.current_vy) < self.stop_velocity_threshold and
-            abs(self.current_wz) < self.stop_velocity_threshold):
-            
-            if not self.is_stopped:
-                rospy.loginfo("🔒 锁定：到达目标点")
-            self.is_stopped = True
+        self._check_lock()
 
         if self.is_stopped:
             self.sport_client.Move(0.0, 0.0, 0.0)
             self.last_cmd_vx = 0.0
             self.last_cmd_vy = 0.0
             self.last_cmd_wz = 0.0
+            return
+
+        mode = self.get_adaptive_mode()
+        if mode != self.last_mode:
+            self.mode_switch_count += 1
+            mode_name = "高速巡航" if mode == "fast" else "低速精准"
+            rospy.loginfo(f"🔄 模式切换: {mode_name} (第{self.mode_switch_count}次)")
+            self.last_mode = mode
+
+        if mode == "fast":
+            R_ang = self.R_v_ang_fast
+            acc_w = self.max_acc_w_fast
         else:
-            mode = self.get_adaptive_mode()
-            
-            if mode != self.last_mode:
-                self.mode_switch_count += 1
-                mode_name = "高速巡航" if mode == "fast" else "低速精准"
-                rospy.loginfo(f"🔄 模式切换: {mode_name} (第{self.mode_switch_count}次)")
-                self.last_mode = mode
-            
-            if mode == "fast":
-                R_ang = self.R_v_ang_fast
-                acc_w = self.max_acc_w_fast
-            else:
-                R_ang = self.R_v_ang_slow
-                acc_w = self.max_acc_w_slow
-            
-            tol_lin = 0.2  # 线速度最大允许偏差 (m/s)
-            tol_ang = 0.3  # 角速度最大允许偏差 (rad/s)
+            R_ang = self.R_v_ang_slow
+            acc_w = self.max_acc_w_slow
 
-            base_vx = np.clip(self.last_cmd_vx, self.current_vx - tol_lin, self.current_vx + tol_lin)
-            base_vy = np.clip(self.last_cmd_vy, self.current_vy - tol_lin, self.current_vy + tol_lin)
-            base_wz = np.clip(self.last_cmd_wz, self.current_wz - tol_ang, self.current_wz + tol_ang)
-            
-            cmd_vx = self.solve_mpc_step(base_vx, self.target_vx, self.last_cmd_vx, self.max_vx, self.max_acc_v, self.R_v_lin)
-            cmd_vy = self.solve_mpc_step(base_vy, self.target_vy, self.last_cmd_vy, self.max_vy, self.max_acc_v, self.R_v_lin)
-            cmd_wz = self.solve_mpc_step(base_wz, self.target_wz, self.last_cmd_wz, self.max_wz, acc_w, R_ang)
+        # tolerance 基准裁剪：限制 last_cmd 相对 current 的偏差（放宽容差减少速度跳变）
+        tol_lin = 0.4  # 线速度最大允许偏差 (m/s), 0.2 -> 0.4
+        tol_ang = 0.5  # 角速度最大允许偏差 (rad/s), 0.3 -> 0.5
+        base_vx = np.clip(self.last_cmd_vx, self.current_vx - tol_lin, self.current_vx + tol_lin)
+        base_vy = np.clip(self.last_cmd_vy, self.current_vy - tol_lin, self.current_vy + tol_lin)
+        base_wz = np.clip(self.last_cmd_wz, self.current_wz - tol_ang, self.current_wz + tol_ang)
 
-            if int(rospy.get_time() * 5) % 10 == 0: 
-                mode_tag = "F" if mode == "fast" else "S"
-                print(f"[{mode_tag}] Target: ({self.target_vx:.2f}, {self.target_wz:.2f}) | "
-                      f"Current: ({self.current_vx:.2f}, {self.current_wz:.2f}) -> "
-                      f"Send: ({cmd_vx:.2f}, {cmd_wz:.2f})")
+        cmd_vx = self.solve_step(base_vx, self.target_vx, self.last_cmd_vx, self.max_vx, self.max_acc_v, R_v=self.R_v_lin)
 
-            if abs(cmd_vx) < 0.01 and abs(cmd_vy) < 0.01 and abs(cmd_wz) < 0.01:
-                self.sport_client.StopMove()
-            else:
-                self.sport_client.Move(cmd_vx, cmd_vy, cmd_wz)
-            
-            self.last_cmd_vx = cmd_vx
-            self.last_cmd_vy = cmd_vy
-            self.last_cmd_wz = cmd_wz
+        if int(rospy.get_time() * 5) % 10 == 0:
+            mode_tag = "F" if mode == "fast" else "S"
+            print(f"[{mode_tag}] Target: ({self.target_vx:.2f}, {self.target_wz:.2f}) | "
+                  f"Current: ({self.current_vx:.2f}, {self.current_wz:.2f}) -> "
+                  f"Send: ({cmd_vx:.2f}, {cmd_wz:.2f})")
+
+        if abs(cmd_vx) < 0.01 and abs(cmd_vy) < 0.01 and abs(cmd_wz) < 0.01:
+            self.sport_client.StopMove()
+        else:
+            self.sport_client.Move(cmd_vx, cmd_vy, cmd_wz)
+
+        self.last_cmd_vx = cmd_vx
+        self.last_cmd_vy = cmd_vy
+        self.last_cmd_wz = cmd_wz
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 g1_control_mpc_stable9.py <network_interface>")
-        sys.exit(-1)
-
-    network_interface = sys.argv[1]
-    rospy.init_node("unitree_mpc_controller", anonymous=False)
-    
-    try:
-        controller = AdaptiveMPCController(network_interface)
-        rospy.spin()
-    except rospy.ROSInterruptException:
-        pass
+    G1BaseController.run(AdaptiveMPCController)
