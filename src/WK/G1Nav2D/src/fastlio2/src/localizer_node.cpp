@@ -305,6 +305,11 @@ public:
             shared_date_->map_path = map_path;
             shared_date_->initial_guess.block<3, 3>(0, 0) = final_rot;
             shared_date_->initial_guess.block<3, 1>(0, 3) = Eigen::Vector3d(x, y, z);
+            // Reset offset to clear stale TF transform (fixes "old robot marker persists").
+            shared_date_->offset_rot = Eigen::Matrix3d::Identity();
+            shared_date_->offset_pos = Eigen::Vector3d::Zero();
+            offset_rot_ = Eigen::Matrix3d::Identity();
+            offset_pos_ = Eigen::Vector3d::Zero();
         }
         
         res.status = 1;

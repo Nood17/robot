@@ -20,6 +20,7 @@ G1 控制器基类。
 import rospy
 import sys
 import threading
+import numpy as np
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Path
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
@@ -117,6 +118,18 @@ class G1BaseController:
 
     def path_callback(self, msg: Path):
         self.can_move = len(msg.poses) > 0
+        # Track route health: detect path oscillation (route becoming weird).
+        new_len = len(msg.poses)
+        if hasattr(self, '_last_path_len') and self._last_path_len > 0:
+            # Path length jumping wildly = TEB replanning frantically = route issue
+            if abs(new_len - self._last_path_len) > max(5, self._last_path_len * 0.5):
+                if not hasattr(self, '_path_oscillation_count'):
+                    self._path_oscillation_count = 0
+                self._path_oscillation_count += 1
+                if self._path_oscillation_count > 3:
+                    rospy.logwarn("⚠️ 路径震荡检测：TEB 频繁重规划，可能路线诡异")
+                    self._path_oscillation_count = 0
+        self._last_path_len = new_len
 
     def cmd_vel_callback(self, msg: Twist):
         # 锁定守卫（latch / counter 模式）
@@ -134,22 +147,31 @@ class G1BaseController:
     # ========== 锁定判定 ==========
 
     def _check_lock(self):
-        """到位锁定检测。latch: 目标≈0 且 当前速度小 → 锁定。counter: 类似但用目标阈值 0.001。"""
+        """到位锁定检测。增加确认计数器，防止里程计延迟导致提前锁定（定点偏移根因）。"""
         if self.lock_style == "none":
             return
         target_thresh = 0.001 if self.lock_style == "counter" else 0.01
+        # Use stricter velocity threshold + confirmation count to avoid premature lock.
+        strict_vel_thresh = 0.015  # Stricter than stop_velocity_threshold
         if (abs(self.target_vx) < target_thresh and
                 abs(self.target_vy) < target_thresh and
                 abs(self.target_wz) < target_thresh and
-                abs(self.current_vx) < self.stop_velocity_threshold and
-                abs(self.current_vy) < self.stop_velocity_threshold and
-                abs(self.current_wz) < self.stop_velocity_threshold):
-            if not self.is_stopped:
-                rospy.loginfo("🔒 锁定：到达目标点，停止运动")
-            self.is_stopped = True
-            if self.lock_style == "counter":
-                self.stop_counter = self.stop_threshold_cycles
-
+                abs(self.current_vx) < strict_vel_thresh and
+                abs(self.current_vy) < strict_vel_thresh and
+                abs(self.current_wz) < strict_vel_thresh):
+            # Require N consecutive confirmations to actually lock (fixes offset drift).
+            if not hasattr(self, '_lock_confirm_count'):
+                self._lock_confirm_count = 0
+            self._lock_confirm_count += 1
+            if self._lock_confirm_count >= 5:  # 5 cycles = 100ms at 50Hz
+                if not self.is_stopped:
+                    rospy.loginfo("🔒 锁定：到达目标点，停止运动 (确认5次)")
+                self.is_stopped = True
+                if self.lock_style == "counter":
+                    self.stop_counter = self.stop_threshold_cycles
+        else:
+            if hasattr(self, '_lock_confirm_count'):
+                self._lock_confirm_count = 0
     # ========== 主控制循环（模板方法） ==========
 
     def control_loop(self, event):
@@ -183,6 +205,13 @@ class G1BaseController:
                                  self.max_vy, self.max_acc_v)
         cmd_wz = self.solve_step(self.current_wz, self.target_wz, self.last_cmd_wz,
                                  self.max_wz, self.max_acc_w)
+
+        # 4.5 连续加速度限幅：防止 solve_step 输出跳变导致顿挫（快一下顿一下根因）
+        max_delta_v = 0.05  # 单步最大速度变化量 (m/s per 20ms step)
+        max_delta_w = 0.08  # 单步最大角速度变化量 (rad/s per 20ms step)
+        cmd_vx = np.clip(cmd_vx, self.last_cmd_vx - max_delta_v, self.last_cmd_vx + max_delta_v)
+        cmd_vy = np.clip(cmd_vy, self.last_cmd_vy - max_delta_v, self.last_cmd_vy + max_delta_v)
+        cmd_wz = np.clip(cmd_wz, self.last_cmd_wz - max_delta_w, self.last_cmd_wz + max_delta_w)
 
         # 5. 发送
         if self.use_stopmove_deadband and abs(cmd_vx) < 0.01 and abs(cmd_vy) < 0.01 and abs(cmd_wz) < 0.01:

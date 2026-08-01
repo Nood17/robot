@@ -121,10 +121,10 @@ class RobotController:
 
 
 def set_fast_params():
-    rospy.set_param('/move_base/TebLocalPlannerROS/max_vel_x', 0.8)
-    rospy.set_param('/move_base/TebLocalPlannerROS/max_vel_theta', 0.8)
-    rospy.set_param('/move_base/TebLocalPlannerROS/acc_lim_x', 0.8)
-    rospy.set_param('/move_base/TebLocalPlannerROS/acc_lim_theta', 0.7)
+    rospy.set_param('/move_base/TebLocalPlannerROS/max_vel_x', 0.5)  # 0.8 -> 0.5, G1 步态在高速时不稳
+    rospy.set_param('/move_base/TebLocalPlannerROS/max_vel_theta', 0.6)  # 0.8 -> 0.6
+    rospy.set_param('/move_base/TebLocalPlannerROS/acc_lim_x', 0.5)  # 0.8 -> 0.5, 降低加速度减少顿挫
+    rospy.set_param('/move_base/TebLocalPlannerROS/acc_lim_theta', 0.5)  # 0.7 -> 0.5
     rospy.set_param('/move_base/TebLocalPlannerROS/path_distance_bias', 60.0)
     rospy.set_param('/move_base/TebLocalPlannerROS/goal_distance_bias', 20.0)
     rospy.set_param('/move_base/TebLocalPlannerROS/xy_goal_tolerance', 0.3)
@@ -134,7 +134,7 @@ def set_fast_params():
     rospy.loginfo("🚀 切换到快速巡航模式")
 
 def set_slow_params():
-    rospy.set_param('/move_base/TebLocalPlannerROS/max_vel_x', 0.6)
+    rospy.set_param('/move_base/TebLocalPlannerROS/max_vel_x', 0.35)  # 0.6 -> 0.35, G1 低速精准更稳
     rospy.set_param('/move_base/TebLocalPlannerROS/max_vel_theta', 1.0)
     rospy.set_param('/move_base/TebLocalPlannerROS/acc_lim_x', 0.5)
     rospy.set_param('/move_base/TebLocalPlannerROS/acc_lim_theta', 0.8)

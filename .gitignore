@@ -24,3 +24,15 @@ venv/
 # 运行时隐私数据（支付码、联系人、人脸照片）
 src/WK/shouna/
 .DS_Store
+
+# Third-party cloned repos (not part of this project)
+unitree_mujoco/
+unitree_rl_gym/
+unitree_sdk2_cpp/
+
+# Local build installs
+.local/
+
+# Simulation artifacts
+/tmp/g1_*
+*.mp4

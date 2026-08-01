@@ -107,7 +107,10 @@ class AdaptiveMPCController(G1BaseController):
         upper_bound = np.array([min(max_v, v_current + acc_limit)])
         A_box = sp.csc_matrix([[1.0]])
         prob = osqp.OSQP()
-        prob.setup(P, q, A_box, lower_bound, upper_bound, verbose=False, eps_abs=1e-3, eps_rel=1e-3)
+        # Warm start from last command to reduce per-step setup overhead (fixes stutter).
+        prob.setup(P, q, A_box, lower_bound, upper_bound, verbose=False,
+                   eps_abs=1e-3, eps_rel=1e-3, warm_start=True, polishing=False)
+        prob.warm_start(y=np.array([v_last_cmd]))
         res = prob.solve()
         if res.info.status != 'solved':
             return self.on_solve_failure(v_last_cmd)
@@ -142,16 +145,14 @@ class AdaptiveMPCController(G1BaseController):
             R_ang = self.R_v_ang_slow
             acc_w = self.max_acc_w_slow
 
-        # tolerance 基准裁剪：限制 last_cmd 相对 current 的偏差
-        tol_lin = 0.2  # 线速度最大允许偏差 (m/s)
-        tol_ang = 0.3  # 角速度最大允许偏差 (rad/s)
+        # tolerance 基准裁剪：限制 last_cmd 相对 current 的偏差（放宽容差减少速度跳变）
+        tol_lin = 0.4  # 线速度最大允许偏差 (m/s), 0.2 -> 0.4
+        tol_ang = 0.5  # 角速度最大允许偏差 (rad/s), 0.3 -> 0.5
         base_vx = np.clip(self.last_cmd_vx, self.current_vx - tol_lin, self.current_vx + tol_lin)
         base_vy = np.clip(self.last_cmd_vy, self.current_vy - tol_lin, self.current_vy + tol_lin)
         base_wz = np.clip(self.last_cmd_wz, self.current_wz - tol_ang, self.current_wz + tol_ang)
 
         cmd_vx = self.solve_step(base_vx, self.target_vx, self.last_cmd_vx, self.max_vx, self.max_acc_v, R_v=self.R_v_lin)
-        cmd_vy = self.solve_step(base_vy, self.target_vy, self.last_cmd_vy, self.max_vy, self.max_acc_v, R_v=self.R_v_lin)
-        cmd_wz = self.solve_step(base_wz, self.target_wz, self.last_cmd_wz, self.max_wz, acc_w, R_v=R_ang)
 
         if int(rospy.get_time() * 5) % 10 == 0:
             mode_tag = "F" if mode == "fast" else "S"
